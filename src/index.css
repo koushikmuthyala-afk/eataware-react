@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --green:      #1a6b3c;
+    --green-light:#2d9e5f;
+    --green-pale: #e8f5ee;
+    --green-mid:  #c6e8d4;
+    --amber:      #d97706;
+    --red:        #dc2626;
+    --ink:        #0f1c0f;
+    --ink-soft:   #2d3e2d;
+    --muted:      #6b7c6b;
+    --border:     #d4e4d4;
+    --surface:    #f7faf7;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--ink);
+    background: #fff;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+}
+
+/* Grade badge colours */
+.grade-a { background: #16a34a; }
+.grade-b { background: #65a30d; }
+.grade-c { background: #d97706; }
+.grade-d { background: #dc2626; }
+.grade-e { background: #7f1d1d; }
+.grade-f { background: #1c1917; }
+
+/* Ingredient dot colours */
+.dot-safe   { background: #16a34a; }
+.dot-caution { background: #d97706; }
+.dot-avoid  { background: #dc2626; }
+
+/* Drawer slide-in */
+.drawer-enter { transform: translateX(100%); }
+.drawer-enter-active { transform: translateX(0); transition: transform 0.3s cubic-bezier(0.4,0,0.2,1); }
+.drawer-exit { transform: translateX(0); }
+.drawer-exit-active { transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.4,0,0.2,1); }

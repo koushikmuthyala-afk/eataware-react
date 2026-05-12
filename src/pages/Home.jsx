@@ -2,41 +2,59 @@ import { useState } from 'react'
 import SearchBar from '../components/SearchBar'
 import ProductCard from '../components/ProductCard'
 import ProductDrawer from '../components/ProductDrawer'
+import ScannerModal from '../components/ScannerModal'
 import { useProducts } from '../hooks/useProducts'
 import { useSearch } from '../hooks/useSearch'
+import { supabase } from '../lib/supabase'
 
 const GRADE_COLORS = { A:'#16a34a', B:'#65a30d', C:'#d97706', D:'#dc2626', E:'#7f1d1d', F:'#1c1917' }
 
-export default function Home() {
+export default function Home({ auth, onSignIn }) {
   const { products, loading, count } = useProducts()
-  const { query, setQuery, gradeFilter, setGradeFilter, results, categories } = useSearch(products)
-  const [selected, setSelected] = useState(null)
-  const [scannerTab, setScannerTab] = useState(null) // 'type' | 'submit' | null
+  const { query, setQuery, gradeFilter, setGradeFilter, results } = useSearch(products)
+  const [selected, setSelected]     = useState(null)
+  const [scannerTab, setScannerTab] = useState(null) // 'barcode'|'grade'|'submit'|null
 
-  const hasSearch = query.trim() || gradeFilter
-  const displayProducts = hasSearch ? results : []
+  const hasSearch     = query.trim() || gradeFilter
+  const displayList   = hasSearch ? results : []
+
+  // Log intake when product is opened
+  async function openProduct(product) {
+    setSelected(product)
+    if (auth?.user) {
+      await supabase.from('user_intakes').insert([{
+        user_id:      auth.user.id,
+        product_name: product.name,
+        grade:        product.grade,
+        slug:         product.slug,
+      }]).then(({ error }) => { if (error) console.warn('Intake log:', error.message) })
+    }
+  }
 
   return (
     <div className="min-h-screen pt-16" style={{ background: 'var(--surface)' }}>
 
       {/* Hero */}
-      <section className="px-6 py-20 text-center max-w-3xl mx-auto">
+      <section className="px-6 py-16 md:py-24 text-center max-w-3xl mx-auto">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold mb-6"
+          style={{ background: 'var(--green-pale)', color: 'var(--green)' }}>
+          🇮🇳 India's Ingredient Intelligence Platform · Free during beta
+        </div>
+
         <h1 className="text-4xl md:text-6xl font-black mb-4 leading-tight" style={{ color: 'var(--ink)' }}>
           Know <em className="not-italic" style={{ color: 'var(--green)' }}>exactly</em> what's<br/>inside your food
         </h1>
-        <p className="text-lg mb-10" style={{ color: 'var(--muted)' }}>
-          Search any packaged product, understand every ingredient,<br className="hidden md:block"/>
-          and discover what it does to your body — A to F graded.
+        <p className="text-lg mb-10 max-w-xl mx-auto" style={{ color: 'var(--muted)' }}>
+          Search any packaged product, understand every ingredient,
+          and discover what it does to your body — A–F graded.
         </p>
 
-        {/* Grade strip */}
-        <div className="flex justify-center gap-3 mb-10">
+        {/* Grade showcase */}
+        <div className="flex justify-center gap-2 md:gap-3 mb-10">
           {Object.entries(GRADE_COLORS).map(([g, col]) => (
             <div key={g} className="flex flex-col items-center gap-1">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-lg text-white" style={{ background: col }}>{g}</div>
-              <div className="text-xs font-medium" style={{ color: 'var(--muted)' }}>
-                {g==='A'?'Best':g==='F'?'Avoid':''}
-              </div>
+              <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center font-black text-lg md:text-xl text-white shadow-sm"
+                style={{ background: col }}>{g}</div>
             </div>
           ))}
         </div>
@@ -47,27 +65,29 @@ export default function Home() {
           setQuery={setQuery}
           gradeFilter={gradeFilter}
           setGradeFilter={setGradeFilter}
-          onGradeIngredients={() => setScannerTab('type')}
+          onGradeIngredients={() => setScannerTab('grade')}
           onSubmitProduct={() => setScannerTab('submit')}
         />
       </section>
 
       {/* Results */}
       <section className="px-6 pb-20 max-w-3xl mx-auto">
+
         {loading && (
-          <div className="text-center py-12" style={{ color: 'var(--muted)' }}>
-            Loading {count > 0 ? count : ''} products…
+          <div className="text-center py-12 text-sm" style={{ color: 'var(--muted)' }}>
+            Loading {count > 0 ? count : ''}+ products…
           </div>
         )}
 
         {!loading && hasSearch && (
           <div className="mb-4 flex items-center justify-between">
-            <div className="text-sm font-medium" style={{ color: 'var(--muted)' }}>
+            <div className="text-sm" style={{ color: 'var(--muted)' }}>
               {results.length} result{results.length !== 1 ? 's' : ''}
               {query && <> for <strong style={{ color: 'var(--ink)' }}>"{query}"</strong></>}
               {gradeFilter && <> · Grade <strong style={{ color: GRADE_COLORS[gradeFilter] }}>{gradeFilter}</strong></>}
             </div>
-            <button onClick={() => { setQuery(''); setGradeFilter('') }} className="text-xs underline" style={{ color: 'var(--muted)' }}>
+            <button onClick={() => { setQuery(''); setGradeFilter('') }}
+              className="text-xs underline" style={{ color: 'var(--muted)' }}>
               Clear
             </button>
           </div>
@@ -80,23 +100,23 @@ export default function Home() {
             <div className="text-sm mb-6" style={{ color: 'var(--muted)' }}>
               Can't find it? Submit the product and we'll grade it within 48 hours.
             </div>
-            <button
-              onClick={() => setScannerTab('submit')}
+            <button onClick={() => setScannerTab('submit')}
               className="px-6 py-3 rounded-full font-semibold text-white text-sm"
-              style={{ background: 'var(--green)' }}
-            >
+              style={{ background: 'var(--green)' }}>
               ➕ Submit a product
             </button>
           </div>
         )}
 
         {!loading && !hasSearch && (
-          <div className="text-center py-8" style={{ color: 'var(--muted)' }}>
-            <p className="text-sm">{count}+ products graded · Search above to explore</p>
-            <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-              {['Maggi', 'Coca-Cola', 'Amul Butter', 'Saffola Oats'].map(s => (
+          <div className="text-center py-8">
+            <p className="text-sm mb-6" style={{ color: 'var(--muted)' }}>
+              {count}+ products graded · Search above or try these popular ones
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {['Maggi','Coca-Cola','Amul Butter','Saffola Oats'].map(s => (
                 <button key={s} onClick={() => setQuery(s)}
-                  className="py-3 px-4 rounded-2xl border font-medium hover:border-green-500 hover:text-green-700 transition"
+                  className="py-3 px-4 rounded-2xl border font-medium text-sm hover:border-green-500 hover:text-green-700 transition"
                   style={{ borderColor: 'var(--border)', color: 'var(--ink-soft)' }}>
                   {s}
                 </button>
@@ -105,23 +125,23 @@ export default function Home() {
           </div>
         )}
 
-        {displayProducts.length > 0 && (
+        {displayList.length > 0 && (
           <div className="grid gap-3 md:grid-cols-2">
-            {displayProducts.map(p => (
-              <ProductCard key={p.slug} product={p} onClick={setSelected} />
+            {displayList.map(p => (
+              <ProductCard key={p.slug} product={p} onClick={openProduct} />
             ))}
           </div>
         )}
       </section>
 
       {/* Stats strip */}
-      <section className="py-6 px-6" style={{ background: 'var(--ink)' }}>
+      <section className="py-8 px-6" style={{ background: 'var(--ink)' }}>
         <div className="max-w-3xl mx-auto flex flex-wrap justify-around gap-6 text-center">
           {[
-            { val: `${count}+`, lbl: 'Products rated A-F' },
-            { val: '120+',       lbl: 'Ingredients decoded' },
-            { val: 'FSSAI',      lbl: 'Referenced data' },
-            { val: 'Free',       lbl: 'During beta' },
+            { val: `${count || '500'}+`, lbl: 'Products rated A–F'       },
+            { val: '120+',               lbl: 'Ingredients decoded'       },
+            { val: 'FSSAI',              lbl: 'FSSAI-referenced data'     },
+            { val: 'Free',               lbl: 'Free to use during beta'   },
           ].map(({ val, lbl }) => (
             <div key={lbl}>
               <div className="text-2xl font-black text-white">{val}</div>
@@ -131,10 +151,16 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Drawer */}
-      {selected && <ProductDrawer product={selected} onClose={() => setSelected(null)} />}
-
-      {/* TODO: ScannerModal for scannerTab */}
+      {/* Modals */}
+      {selected && (
+        <ProductDrawer product={selected} onClose={() => setSelected(null)} />
+      )}
+      {scannerTab && (
+        <ScannerModal
+          initialTab={scannerTab}
+          onClose={() => setScannerTab(null)}
+        />
+      )}
     </div>
   )
 }

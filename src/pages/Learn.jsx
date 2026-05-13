@@ -65,7 +65,10 @@ For gut health, the cheapest and most effective option is plain dahi (curd) — 
   },
 ]
 
+import { useSEO } from '../hooks/useSEO'
+
 export default function Learn() {
+  useSEO({ title: 'Learn', description: 'Plain-language guides to palm oil, TBHQ, sugar, trans fat, and reading Indian ingredient labels.' })
   return (
     <div className="min-h-screen pt-16" style={{ background: 'var(--surface)' }}>
       <div className="px-6 py-16 max-w-3xl mx-auto">

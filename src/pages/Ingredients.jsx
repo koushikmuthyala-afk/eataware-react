@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react'
+import { useSEO } from '../hooks/useSEO'
 import { INGREDIENTS, CONCERN_LABELS, ORGAN_ICONS } from '../lib/ingredientData'
 
 export default function Ingredients() {
+  useSEO({ title: 'Ingredient Decoder', description: 'Look up any food additive — TBHQ, tartrazine, palm oil, MSG — and understand what it does to your body.' })
   const [query, setQuery]           = useState('')
   const [concernFilter, setConcernFilter] = useState('')
   const [selected, setSelected]     = useState(null)

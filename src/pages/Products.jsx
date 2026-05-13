@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useSEO } from '../hooks/useSEO'
 import { useProducts } from '../hooks/useProducts'
 import ProductCard from '../components/ProductCard'
 import ProductDrawer from '../components/ProductDrawer'
@@ -8,6 +9,7 @@ const GRADES = ['A','B','C','D','E','F']
 
 export default function Products() {
   const { products, loading, count } = useProducts()
+  useSEO({ title: 'All Products', description: 'Browse all 500+ A-F graded Indian packaged foods. Filter by grade, category, or search by name.' })
   const [selected, setSelected]     = useState(null)
   const [gradeFilter, setGradeFilter] = useState('')
   const [catFilter, setCatFilter]   = useState('')

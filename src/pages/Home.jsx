@@ -156,7 +156,8 @@ export default function Home({ auth, onSignIn }) {
         <ProductDrawer product={selected} onClose={() => setSelected(null)} />
       )}
       {scannerTab && (
-        <ScannerModal
+              <ScannerModal
+          onProductFound={(product) => { setScannerTab(null); setSelected(product) }}
           initialTab={scannerTab}
           onClose={() => setScannerTab(null)}
         />

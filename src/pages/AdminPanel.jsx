@@ -9,7 +9,7 @@ const GRADES = ['A','B','C','D','E','F']
 const EMPTY = { slug:'', name:'', brand:'', grade:'C', category:'', impact:'', ings:'[]', status:'published', barcode:'' }
 const PAGE_SIZE = 50
 
-export default function AdminPanel({ user }) {
+export default function AdminPanel({ user, authLoading }) {
   useSEO({ title: 'Admin Panel' })
   const [tab, setTab]               = useState('dashboard')
   const [products, setProducts]     = useState([])
@@ -135,8 +135,31 @@ export default function AdminPanel({ user }) {
     setTab('products')
   }
 
-  if (!user) return <div className="min-h-screen pt-24 flex items-center justify-center"><div className="text-center"><div className="text-4xl mb-3">&#x1F510;</div><div className="font-bold" style={{ color: 'var(--ink)' }}>Sign in required</div></div></div>
-  if (!isAdmin) return <div className="min-h-screen pt-24 flex items-center justify-center"><div className="text-center"><div className="text-4xl mb-3">&#x1F6AB;</div><div className="font-bold" style={{ color: 'var(--ink)' }}>Admin access only</div><div className="text-sm" style={{ color: 'var(--muted)' }}>{user.email}</div></div></div>
+  // Wait for auth to resolve before showing sign-in wall
+  if (authLoading) return (
+    <div className="min-h-screen pt-24 flex items-center justify-center">
+      <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
+        style={{ borderColor: 'var(--green)', borderTopColor: 'transparent' }} />
+    </div>
+  )
+  if (!user) return (
+    <div className="min-h-screen pt-24 flex items-center justify-center">
+      <div className="text-center">
+        <div className="text-4xl mb-3">🔐</div>
+        <div className="font-bold mb-1" style={{ color: 'var(--ink)' }}>Sign in required</div>
+        <div className="text-sm" style={{ color: 'var(--muted)' }}>Admin access only · <a href="/" style={{ color: 'var(--green)' }}>Go home</a></div>
+      </div>
+    </div>
+  )
+  if (!isAdmin) return (
+    <div className="min-h-screen pt-24 flex items-center justify-center">
+      <div className="text-center">
+        <div className="text-4xl mb-3">🚫</div>
+        <div className="font-bold mb-1" style={{ color: 'var(--ink)' }}>Admin access only</div>
+        <div className="text-sm" style={{ color: 'var(--muted)' }}>{user.email}</div>
+      </div>
+    </div>
+  )
 
   return (
     <div className="min-h-screen pt-16" style={{ background: 'var(--surface)' }}>

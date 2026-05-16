@@ -55,7 +55,7 @@ export default function App() {
           <Route path="/ingredients" element={<Ingredients />} />
           <Route path="/learn"       element={<Learn />} />
           <Route path="/about"       element={<About />} />
-          <Route path="/admin"       element={<AdminPanel user={auth.user} />} />
+          <Route path="/admin"       element={<AdminPanel user={auth.user} authLoading={auth.loading} />} />
         </Routes>
       </Suspense>
 

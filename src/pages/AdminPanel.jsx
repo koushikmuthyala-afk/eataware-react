@@ -179,7 +179,7 @@ export default function AdminPanel({ user, authLoading }) {
         </div>
 
         <div className="flex gap-2 mb-6 flex-wrap">
-          {[['dashboard','\u{1F4CA} Dashboard'],['products','\u{1F4E6} Products'],['submissions',`\u{1F4EC} Submissions${pendingCount>0?' ('+pendingCount+' pending)':''}`]].map(([id, label]) => (
+          {[['dashboard','📊 Dashboard'],['products','📦 Products'],['submissions',`📬 Submissions${pendingCount>0?' ('+pendingCount+' pending)':''}`]].map(([id, label]) => (
             <button key={id} onClick={() => { setTab(id); setPage(0) }}
               className="px-5 py-2.5 rounded-full text-sm font-semibold"
               style={{ background: tab===id?'var(--green)':'#fff', color: tab===id?'#fff':'var(--muted)', border: '1px solid var(--border)' }}>

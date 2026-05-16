@@ -1,19 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
 import { quickScore, RISK_LABELS } from '../lib/quickScore'
 import { gradeColor, gradeBg, gradeLabel } from '../lib/scoringEngine'
+import { createWorker } from 'tesseract.js'
 
-// Tesseract is loaded lazily — only when user actually uses OCR
+// Singleton worker — created once, reused across scans
 let tesseractWorker = null
 
 async function getTesseract() {
   if (tesseractWorker) return tesseractWorker
-  const { createWorker } = await import('tesseract.js')
-  // v7 API: pass only logger option — CDN paths are handled automatically
-  const worker = await createWorker('eng', 1, {
-    logger: () => {},
+  // Explicit CDN paths required for Vite/PWA — prevents worker script path issues
+  tesseractWorker = await createWorker('eng', 1, {
+    workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/worker.min.js',
+    corePath:   'https://cdn.jsdelivr.net/npm/tesseract.js-core@7.0.0',
+    langPath:   'https://tessdata.projectnaptha.com/4.0.0',
+    logger:     () => {},
   })
-  tesseractWorker = worker
-  return worker
+  return tesseractWorker
 }
 
 // Clean up raw OCR text to extract usable ingredient list
@@ -74,6 +76,14 @@ export default function OCRScanner({ onGraded, onClose }) {
     return () => stopCamera()
   }, [])
 
+  // Connect stream to video element after ready state renders the video
+  useEffect(() => {
+    if (state === STATES.ready && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.play().catch(() => {})
+    }
+  }, [state])
+
   // ── Camera ─────────────────────────────────────────────────────
   async function startCamera() {
     setState(STATES.starting)
@@ -87,11 +97,8 @@ export default function OCRScanner({ onGraded, onClose }) {
         }
       })
       streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-      }
       setState(STATES.ready)
+      // videoRef may not exist yet — useEffect will assign srcObject after render
     } catch (err) {
       setError(err.name === 'NotAllowedError'
         ? 'Camera permission denied. Please allow camera access in your browser settings.'
@@ -174,8 +181,7 @@ export default function OCRScanner({ onGraded, onClose }) {
     setCleanText('')
     setResult(null)
     setError('')
-    setState(STATES.ready)
-    // Restart camera
+    // Restart camera — useEffect will connect stream to video after state change
     startCamera()
   }
 

@@ -8,10 +8,9 @@ let tesseractWorker = null
 async function getTesseract() {
   if (tesseractWorker) return tesseractWorker
   const { createWorker } = await import('tesseract.js')
+  // v7 API: pass only logger option — CDN paths are handled automatically
   const worker = await createWorker('eng', 1, {
-    workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
-    corePath:   'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',
-    logger:     () => {}, // silence logs
+    logger: () => {},
   })
   tesseractWorker = worker
   return worker
@@ -134,15 +133,16 @@ export default function OCRScanner({ onGraded, onClose }) {
     try {
       const worker = await getTesseract()
 
-      // Tesseract v5 API
-      const { data: { text, confidence } } = await worker.recognize(capturedImage)
+      // v7 API — same recognize interface
+      const { data } = await worker.recognize(capturedImage)
+      const text = data.text || ''
       setRawText(text)
 
       const cleaned = cleanOCRText(text)
       setCleanText(cleaned)
 
-      if (!cleaned || cleaned.length < 20) {
-        setError('Could not read ingredients clearly. Try better lighting or hold the camera steadier.')
+      if (!cleaned || cleaned.length < 15) {
+        setError('Could not read text clearly. Try better lighting, hold steadier, or get closer to the label.')
         setState(STATES.error)
         return
       }
@@ -152,7 +152,8 @@ export default function OCRScanner({ onGraded, onClose }) {
       setState(STATES.result)
 
     } catch (err) {
-      setError('OCR failed: ' + err.message)
+      console.error('OCR error:', err)
+      setError('Could not read the image: ' + (err.message || 'unknown error'))
       setState(STATES.error)
     }
   }

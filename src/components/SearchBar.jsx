@@ -6,7 +6,7 @@ const QUICK_TAGS = [
   'Bournvita', 'Kurkure', 'Oats', 'Coca-Cola', 'Britannia'
 ]
 
-export default function SearchBar({ query, setQuery, gradeFilter, setGradeFilter, onGradeIngredients, onSubmitProduct }) {
+export default function SearchBar({ query, setQuery, gradeFilter, setGradeFilter, onGradeIngredients, onSubmitProduct, onScanPack }) {
   return (
     <div className="bg-white rounded-3xl border p-5 shadow-sm" style={{ borderColor: 'var(--border)' }}>
       {/* Search input */}
@@ -74,6 +74,12 @@ export default function SearchBar({ query, setQuery, gradeFilter, setGradeFilter
 
       {/* Phase 4 action buttons */}
       <div className="flex gap-2 flex-wrap pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+        <button
+          onClick={onScanPack}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition hover:border-green-500 hover:text-green-700"
+          style={{ borderColor: 'var(--border)', color: 'var(--muted)', background: '#fff' }}>
+          🔬 Scan pack
+        </button>
         <button
           onClick={onGradeIngredients}
           className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold border transition hover:bg-green-50"

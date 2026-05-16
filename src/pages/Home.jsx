@@ -13,7 +13,7 @@ export default function Home({ auth, onSignIn }) {
   const { products, loading, count } = useProducts()
   const { query, setQuery, gradeFilter, setGradeFilter, results } = useSearch(products)
   const [selected, setSelected]     = useState(null)
-  const [scannerTab, setScannerTab] = useState(null) // 'barcode'|'grade'|'submit'|null
+  const [scannerTab, setScannerTab] = useState(null) // 'barcode'|'ocr'|'grade'|'submit'|null
 
   const hasSearch     = query.trim() || gradeFilter
   const displayList   = hasSearch ? results : []
@@ -65,6 +65,7 @@ export default function Home({ auth, onSignIn }) {
           setQuery={setQuery}
           gradeFilter={gradeFilter}
           setGradeFilter={setGradeFilter}
+          onScanPack={() => setScannerTab('ocr')}
           onGradeIngredients={() => setScannerTab('grade')}
           onSubmitProduct={() => setScannerTab('submit')}
         />

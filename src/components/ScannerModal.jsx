@@ -3,11 +3,13 @@ import { quickScore, RISK_LABELS } from '../lib/quickScore'
 import { gradeColor, gradeBg, gradeLabel } from '../lib/scoringEngine'
 import { supabase } from '../lib/supabase'
 import CameraScanner from './CameraScanner'
+import OCRScanner from './OCRScanner'
 
 const TABS = [
-  { id: 'barcode', label: '📷 Scan'              },
-  { id: 'grade',   label: '✏️ Grade Ingredients'  },
-  { id: 'submit',  label: '➕ Submit Product'      },
+  { id: 'barcode', label: '📷 Barcode'            },
+  { id: 'ocr',     label: '🔬 Scan Pack'           },
+  { id: 'grade',   label: '✏️ Grade Text'          },
+  { id: 'submit',  label: '➕ Submit'               },
 ]
 
 const SAMPLES = [
@@ -108,7 +110,7 @@ export default function ScannerModal({ initialTab = 'grade', onClose, onProductF
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b flex-shrink-0"
           style={{ borderColor: 'var(--border)' }}>
           <h2 className="font-bold text-base" style={{ color: 'var(--ink)' }}>
-            {tab === 'barcode' ? '📷 Scan a Product' : tab === 'grade' ? '✏️ Grade Ingredients' : '➕ Submit a Product'}
+            {tab === 'barcode' ? '📷 Scan Barcode' : tab === 'ocr' ? '🔬 Scan Ingredient Label' : tab === 'grade' ? '✏️ Grade Ingredients' : '➕ Submit a Product'}
           </h2>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -140,6 +142,18 @@ export default function ScannerModal({ initialTab = 'grade', onClose, onProductF
             <CameraScanner
               onFoundInDB={handleFoundInDB}
               onNotFound={handleNotFound}
+              onClose={onClose}
+            />
+          )}
+
+
+          {/* ── OCR SCAN TAB ── */}
+          {tab === 'ocr' && (
+            <OCRScanner
+              onGraded={({ cleanText, result }) => {
+                setSubIngs(cleanText)
+                setTab('submit')
+              }}
               onClose={onClose}
             />
           )}

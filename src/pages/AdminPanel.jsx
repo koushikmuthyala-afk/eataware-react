@@ -109,9 +109,7 @@ export default function AdminPanel({ user }) {
   }
 
   async function approveSubmission(sub) {
-    const slug = sub.product_name.toLowerCase()
-      .replace(/[^a-z0-9 -]/g, '').replace(/\s+/g, '-').replace(/^-+|-+$/g, '')
-      + '-' + Date.now().toString(36)
+    const slug = sub.product_name.toLowerCase().replace(/[^\w\s-]/g,'').replace(/\s+/g,'-').replace(/^-+|-+$/g,'') + '-' + Date.now().toString(36)
     const scored = quickScore(sub.ingredients || '')
     const ings = scored.flags.map(f => ({
       dot: f.risk==='h' ? 'dot-avoid' : f.risk==='c' ? 'dot-caution' : 'dot-safe',
@@ -158,15 +156,11 @@ export default function AdminPanel({ user }) {
         </div>
 
         <div className="flex gap-2 mb-6 flex-wrap">
-          {[
-            ['dashboard', '📊 Dashboard'],
-            ['products',  '📦 Products'],
-            ['submissions', '📬 Submissions' + (pendingCount>0 ? ' ('+pendingCount+' pending)' : '')],
-          ].map(([id, label]) => (
+          {[['dashboard','\u{1F4CA} Dashboard'],['products','\u{1F4E6} Products'],['submissions',`\u{1F4EC} Submissions${pendingCount>0?' ('+pendingCount+' pending)':''}`]].map(([id, label]) => (
             <button key={id} onClick={() => { setTab(id); setPage(0) }}
               className="px-5 py-2.5 rounded-full text-sm font-semibold"
               style={{ background: tab===id?'var(--green)':'#fff', color: tab===id?'#fff':'var(--muted)', border: '1px solid var(--border)' }}>
-              {label}
+              {id==='dashboard'?'📊 Dashboard':id==='products'?'📦 Products':label}
             </button>
           ))}
         </div>
@@ -300,14 +294,8 @@ export default function AdminPanel({ user }) {
 
         {/* SUBMISSIONS */}
         {tab === 'submissions' && (
-          loading ? (
-            <div className="text-center py-10 text-sm" style={{ color: 'var(--muted)' }}>Loading...</div>
-          ) : submissions.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="text-4xl mb-3">📭</div>
-              <div className="font-semibold" style={{ color: 'var(--ink)' }}>No submissions yet</div>
-            </div>
-          ) :
+          loading ? <div className="text-center py-10 text-sm" style={{ color: 'var(--muted)' }}>Loading...</div> :
+          submissions.length === 0 ? <div className="text-center py-16"><div className="text-4xl mb-3">&#x1F4ED;</div><div className="font-semibold" style={{ color: 'var(--ink)' }}>No submissions yet</div></div> :
           <div className="space-y-3">
             {submissions.map(sub => (
               <div key={sub.id} className="bg-white rounded-2xl border p-4"
@@ -354,9 +342,7 @@ function ProductForm({ initial, onSave, onCancel, saving }) {
 
   useEffect(() => {
     if (!form._existing && form.name) {
-      const slug = form.name.toLowerCase().trim()
-        .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/^-+|-+$/g, '')
-      set('slug', slug)
+      set('slug', form.name.toLowerCase().trim().replace(/[^\w\s-]/g,'').replace(/\s+/g,'-').replace(/^-+|-+$/g,''))
     }
   }, [form.name])
 

@@ -75,7 +75,7 @@ export default function ScannerModal({ initialTab = 'grade', onClose, onProductF
     setSubError(''); setSubLoading(true)
     const preview = quickScore(subIngs)
     try {
-      const { error } = await supabase.from('submissions').insert([{
+      const payload = {
         product_name:    subName.trim(),
         brand:           subBrand.trim(),
         ingredients:     subIngs.trim(),
@@ -83,11 +83,15 @@ export default function ScannerModal({ initialTab = 'grade', onClose, onProductF
         predicted_grade: preview.grade,
         predicted_score: preview.score,
         status:          'pending',
-      }])
+      }
+      console.log('[Submit] sending:', payload)
+      const { data, error } = await supabase.from('submissions').insert([payload]).select()
+      console.log('[Submit] data:', data, 'error:', JSON.stringify(error))
       if (error) throw error
       setSubDone(true)
     } catch (e) {
-      setSubError('Submission failed: ' + e.message)
+      console.error('[Submit] caught:', e)
+      setSubError('Error: ' + (e?.message || e?.code || JSON.stringify(e)))
     } finally {
       setSubLoading(false)
     }

@@ -84,13 +84,13 @@ export default function ScannerModal({ initialTab = 'grade', onClose, onProductF
         predicted_score: preview.score,
         status:          'pending',
       }
-      console.log('[Submit] sending:', payload)
+      #console.log('[Submit] sending:', payload)
       const { data, error } = await supabase.from('submissions').insert([payload]).select()
-      console.log('[Submit] data:', data, 'error:', JSON.stringify(error))
+      #console.log('[Submit] data:', data, 'error:', JSON.stringify(error))
       if (error) throw error
       setSubDone(true)
     } catch (e) {
-      console.error('[Submit] caught:', e)
+      #console.error('[Submit] caught:', e)
       setSubError('Error: ' + (e?.message || e?.code || JSON.stringify(e)))
     } finally {
       setSubLoading(false)

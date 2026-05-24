@@ -11,7 +11,7 @@ export function useProducts() {
       try {
         const { data, error } = await supabase
           .from('products')
-          .select('slug,name,grade,category,impact,ings,nutri')
+          .select('slug,name,brand,grade,category,impact,ings,nutri')
           .eq('status', 'published')
           .limit(2000)
         if (error) throw error

@@ -60,6 +60,7 @@ export default function OCRScanner({ onGraded, onClose }) {
   const videoRef   = useRef(null)
   const canvasRef  = useRef(null)
   const streamRef  = useRef(null)
+  const fileInputRef = useRef(null)
 
   const [state, setState]       = useState(STATES.idle)
   const [progress, setProgress] = useState(0)
@@ -185,6 +186,20 @@ export default function OCRScanner({ onGraded, onClose }) {
     startCamera()
   }
 
+  // ── Gallery upload ─────────────────────────────────────────────
+  function handleFileUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      setCapturedImage(reader.result)
+      setState(STATES.capturing)
+    }
+    reader.readAsDataURL(file)
+    // Reset file input so same file can be re-selected
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   // ── Render ──────────────────────────────────────────────────────
   return (
     <div>
@@ -216,6 +231,13 @@ export default function OCRScanner({ onGraded, onClose }) {
             style={{ background: 'var(--green)' }}>
             Start Camera →
           </button>
+          <button onClick={() => fileInputRef.current?.click()}
+            className="w-full py-2.5 rounded-2xl text-sm font-semibold border mt-2"
+            style={{ borderColor: 'var(--green-mid)', color: 'var(--green)' }}>
+            📁 Upload from Gallery
+          </button>
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+            onChange={handleFileUpload} />
         </div>
       )}
 
@@ -416,6 +438,11 @@ export default function OCRScanner({ onGraded, onClose }) {
 
           {/* Manual fallback */}
           <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+            <button onClick={() => fileInputRef.current?.click()}
+              className="w-full py-2.5 rounded-2xl text-sm font-semibold border mb-3"
+              style={{ borderColor: 'var(--green-mid)', color: 'var(--green)' }}>
+              📁 Upload from Gallery instead
+            </button>
             <p className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
               Or paste the ingredient list manually:
             </p>

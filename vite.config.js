@@ -13,7 +13,7 @@ export default defineConfig({
       manifest: {
         name: 'EatAware — Know What You Eat',
         short_name: 'EatAware',
-        description: "India's ingredient intelligence platform. A–F grading for 500+ packaged foods.",
+        description: "India's ingredient intelligence platform. A–F grading for 1000+ packaged foods.",
         theme_color: '#1a6b3c',
         background_color: '#ffffff',
         display: 'standalone',

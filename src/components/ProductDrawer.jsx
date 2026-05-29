@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import ScoreCard from './ScoreCard'
 import GradeBadge from './GradeBadge'
 import { gradeColor } from '../lib/scoringEngine'
+import { trackPageView } from '../lib/analytics'
 
 export default function ProductDrawer({ product, onClose }) {
   // Close on Escape
@@ -10,6 +11,11 @@ export default function ProductDrawer({ product, onClose }) {
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
+
+  // Track product view
+  useEffect(() => {
+    if (product?.slug) trackPageView('/product/' + product.slug, product.slug)
+  }, [product?.slug])
 
   // Prevent body scroll when open
   useEffect(() => {

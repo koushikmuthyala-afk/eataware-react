@@ -34,16 +34,22 @@ function cleanOCRText(raw) {
 function looksLikeIngredients(text) {
   const lower = text.toLowerCase()
   const score = [
-    /flour|maida|atta/.test(lower),
-    /salt|sugar|sweetener/.test(lower),
-    /oil|fat|butter|ghee/.test(lower),
+    /flour|maida|atta|besan/.test(lower),
+    /salt|sugar|sweetener|jaggery/.test(lower),
+    /oil|fat|butter|ghee|vanaspati/.test(lower),
     /ins\s?\d{3}|e\d{3}/.test(lower),
-    /preserv|colour|flavou|emulsif/.test(lower),
-    /wheat|rice|corn|soy|milk|egg/.test(lower),
+    /preserv|colour|flavou|emulsif|stabiliz|antioxid/.test(lower),
+    /wheat|rice|corn|soy|milk|egg|water|starch/.test(lower),
+    /sodium|calcium|potassium|acid|phosph/.test(lower),
+    /spice|masala|turmeric|chilli|cumin|pepper/.test(lower),
+    /protein|vitamin|mineral|fibre|fiber/.test(lower),
+    /contain|ingredient|allergen/.test(lower),
     text.includes(','),
     text.split(',').length > 2,
+    // Check that text has mostly readable ASCII/English characters
+    (text.replace(/[a-zA-Z0-9,.\-()%\s:;]/g, '').length / text.length) < 0.3,
   ].filter(Boolean).length
-  return score >= 2
+  return score >= 3
 }
 
 const STATES = {
@@ -155,7 +161,22 @@ export default function OCRScanner({ onGraded, onClose }) {
         return
       }
 
+      // Validate text looks like actual ingredients before grading
+      if (!looksLikeIngredients(cleaned)) {
+        setError('The scanned text does not look like an ingredient list. Make sure you are capturing the ingredients section on the back of the pack, not the front label or nutritional info table.')
+        setState(STATES.error)
+        return
+      }
+
       const scored = quickScore(cleaned)
+
+      // If quickScore found zero recognizable terms, warn the user
+      if (scored.unrecognized) {
+        scored.grade = '?'
+        scored.score = 0
+        scored.flags = [{ name: 'No recognizable ingredients found', risk: 'c', pts: 0 }]
+      }
+
       setResult(scored)
       setState(STATES.result)
 

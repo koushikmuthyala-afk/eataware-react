@@ -49,12 +49,16 @@ export function quickScore(text) {
   }
 
   score = Math.max(0, Math.min(100, score))
+
+  // If zero rules matched, the text likely isn't a real ingredient list
+  const unrecognized = flags.length === 0
+
   let grade = 'F'
   for (const band of GRADE_BANDS) {
     if (score >= band.min) { grade = band.grade; break }
   }
 
-  return { score, grade, flags }
+  return { score, grade, flags, unrecognized }
 }
 
 export const RISK_LABELS = {

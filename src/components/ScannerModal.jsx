@@ -72,8 +72,13 @@ export default function ScannerModal({ initialTab = 'grade', onClose, onProductF
   async function submitProduct() {
     if (!subName.trim()) { setSubError('Please enter the product name.'); return }
     if (!subIngs.trim()) { setSubError('Please paste the ingredient list.'); return }
-    setSubError(''); setSubLoading(true)
+    // Validate ingredients look real before submitting
     const preview = quickScore(subIngs)
+    if (preview.unrecognized) {
+      setSubError('The ingredient text does not contain any recognizable ingredients. Please paste the actual ingredient list from the product label.')
+      return
+    }
+    setSubError(''); setSubLoading(true)
     try {
       const payload = {
         product_name:    subName.trim(),
@@ -224,7 +229,11 @@ export default function ScannerModal({ initialTab = 'grade', onClose, onProductF
                       })} 
                     </div>
                   ) : (
-                    <div className="px-4 py-3 text-sm" style={{ color: 'var(--muted)' }}>No major concerns detected.</div>
+                    <div className="px-4 py-3 text-sm" style={{ color: gradeResult.unrecognized ? '#d97706' : 'var(--muted)' }}>
+                      {gradeResult.unrecognized
+                        ? '⚠️ No recognizable ingredients found. The text may not be a valid ingredient list — please double-check and try again.'
+                        : 'No major concerns detected.'}
+                    </div>
                   )}
                   <div className="px-4 pb-3 flex items-center justify-between">
                     <p className="text-xs" style={{ color: 'var(--muted)' }}>Preliminary · Verify with official label</p>

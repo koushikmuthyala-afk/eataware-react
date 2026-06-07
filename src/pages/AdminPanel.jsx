@@ -47,8 +47,8 @@ export default function AdminPanel({ user, authLoading }) {
       supabase.from('submissions').select('*', { count:'exact', head:true }).eq('status','pending'),
       supabase.from('submissions').select('product_name,predicted_grade,created_at').eq('status','pending').order('created_at',{ascending:false}).limit(5),
     ])
-    const { data: gradeData } = await supabase.from('products').select('grade').eq('status','published')
-    const gradeCount = GRADES.reduce((acc, g) => { acc[g] = gradeData?.filter(p=>p.grade===g).length||0; return acc }, {})
+    const { data: gradeData } = await supabase.rpc('get_grade_distribution')
+    const gradeCount = GRADES.reduce((acc, g) => { acc[g] = gradeData?.find(r=>r.grade===g)?.cnt||0; return acc }, {})
     setStats({ total, published, pending, recent: recent||[], gradeCount })
     setLoading(false)
   }

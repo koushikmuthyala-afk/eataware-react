@@ -23,10 +23,29 @@ function cleanOCRText(raw) {
   return raw
     .replace(/\n+/g, ', ')           // newlines → commas
     .replace(/[|[\]{}\\]/g, '')      // remove OCR noise chars
-    .replace(/\s{2,}/g, ' ')        // collapse spaces
-    .replace(/,\s*,/g, ',')         // remove double commas
-    .replace(/^\s*[Ii]ngredients?\s*[:.]?\s*/i, '') // strip "Ingredients:" prefix
-    .replace(/[Cc]ontains?\s*[:.]?\s*/i, '')
+    // Strip nutritional table data
+    .replace(/nutri(?:tion(?:al)?|ents?)\s*(?:information|facts?|value|table)[^]*?(?=ingredients?|$)/gi, '')
+    .replace(/(?:energy|protein|carbohydrate|total fat|saturated fat|trans fat|cholesterol|sodium|dietary fibre)\s*[\(\-:]\s*[\d.]+\s*(?:g|mg|kcal|kj|%)[^,]*/gi, '')
+    .replace(/(?:per\s*(?:100\s*[gm]l?|serv(?:e|ing)))[^,]*/gi, '')
+    .replace(/%\s*(?:rda|dv|daily value)[^,]*/gi, '')
+    // Strip manufacturing/label metadata
+    .replace(/(?:mfg|mfd|pkg|exp|best before|use by|batch|lot|mrp|net (?:weight|wt|qty))\s*[:.]?\s*[^,]*/gi, '')
+    .replace(/(?:fssai|lic|reg)\s*(?:no|number)?\s*[:.]?\s*[\d]+[^,]*/gi, '')
+    .replace(/(?:manufactured|marketed|packed|distributed)\s*(?:by|at|for)\s*[:.]?\s*[^,]*/gi, '')
+    .replace(/(?:customer care|toll free|helpline|write to|contact)\s*[:.]?\s*[^,]*/gi, '')
+    .replace(/(?:store|keep)\s*(?:in|at)\s*(?:cool|dry|room)[^,]*/gi, '')
+    // Strip allergen warnings (separate from ingredients)
+    .replace(/allergen\s*(?:information|warning|advice|declaration)\s*[:.]?\s*[^,]*/gi, '')
+    .replace(/(?:contains?|may contain)\s*[:.]?\s*(?:wheat|milk|soy|nut|egg|fish|gluten|sesame|mustard)[^,]*/gi, '')
+    // Strip barcode-like patterns
+    .replace(/\b\d{8,13}\b/g, '')
+    // Strip very short fragments (OCR noise)
+    .replace(/(?:^|,)\s*[a-zA-Z]{1,2}(?:\s|,|$)/g, ', ')
+    // Final cleanup
+    .replace(/\s{2,}/g, ' ')
+    .replace(/,\s*,/g, ',')
+    .replace(/^\s*[Ii]ngredients?\s*[:.]?\s*/i, '')
+    .replace(/^\s*,+/, '')
     .trim()
 }
 

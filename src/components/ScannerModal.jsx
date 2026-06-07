@@ -5,6 +5,40 @@ import { supabase } from '../lib/supabase'
 import CameraScanner from './CameraScanner'
 import OCRScanner from './OCRScanner'
 
+// Clean ingredient text: strip nutrition tables, metadata, garbage
+function cleanIngredientText(text) {
+  return text
+    .replace(/nutri(?:tion(?:al)?|ents?)\s*(?:information|facts?|value|table)[^]*?(?=ingredients?|$)/gi, '')
+    .replace(/(?:energy|protein|carbohydrate|total fat|saturated fat|trans fat|cholesterol|sodium|dietary fibre)\s*[\(\-:]\s*[\d.]+\s*(?:g|mg|kcal|kj|%)[^,]*/gi, '')
+    .replace(/(?:per\s*(?:100\s*[gm]l?|serv(?:e|ing)))[^,]*/gi, '')
+    .replace(/%\s*(?:rda|dv|daily value)[^,]*/gi, '')
+    .replace(/(?:mfg|mfd|pkg|exp|best before|use by|batch|lot|mrp|net (?:weight|wt|qty))\s*[:.]?\s*[^,]*/gi, '')
+    .replace(/(?:fssai|lic|reg)\s*(?:no|number)?\s*[:.]?\s*[\d]+[^,]*/gi, '')
+    .replace(/(?:manufactured|marketed|packed|distributed)\s*(?:by|at|for)[^,]*/gi, '')
+    .replace(/allergen\s*(?:information|warning|advice|declaration)\s*[:.]?\s*[^,]*/gi, '')
+    .replace(/(?:contains?|may contain)\s*[:.]?\s*(?:wheat|milk|soy|nut|egg|fish|gluten)[^,]*/gi, '')
+    .replace(/\b\d{8,13}\b/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/,\s*,/g, ',')
+    .replace(/^\s*,+/, '')
+    .trim()
+}
+
+// Check if text is usable ingredient text (not garbage/nutrition table)
+function isGarbageText(text) {
+  if (!text || text.length < 10) return true
+  // High ratio of non-readable characters = OCR garbage
+  const nonReadable = text.replace(/[a-zA-Z0-9,.\-()%\s:;&/'"]/g, '').length
+  if (nonReadable / text.length > 0.25) return true
+  // If text is extremely long (>800 chars), likely scanned entire pack
+  if (text.length > 800) return true
+  // Nutrition table keywords dominate
+  const nutriWords = (text.match(/energy|protein|carbohydrate|fat|sodium|cholesterol|kcal|kj|serving|rda/gi) || []).length
+  const totalWords = text.split(/\s+/).length
+  if (nutriWords > 5 && nutriWords / totalWords > 0.15) return true
+  return false
+}
+
 const TABS = [
   { id: 'barcode', label: '📷 Barcode'            },
   { id: 'ocr',     label: '🔬 Scan Pack'           },
@@ -45,7 +79,11 @@ export default function ScannerModal({ initialTab = 'grade', onClose, onProductF
   }, [])
 
   useEffect(() => {
-    if (subIngs.trim().length > 20) setSubPreview(quickScore(subIngs))
+    if (subIngs.trim().length > 20) {
+      const cleaned = cleanIngredientText(subIngs)
+      if (!isGarbageText(cleaned)) setSubPreview(quickScore(cleaned))
+      else setSubPreview(null)
+    }
     else setSubPreview(null)
   }, [subIngs])
 
@@ -64,18 +102,30 @@ export default function ScannerModal({ initialTab = 'grade', onClose, onProductF
 
   function runGrade() {
     if (!ingText.trim()) return
-    setGradeResult(quickScore(ingText))
-    setSubIngs(ingText)
+    const cleaned = cleanIngredientText(ingText)
+    if (isGarbageText(cleaned)) {
+      setGradeResult({ grade: '?', score: 0, flags: [{ name: 'Text looks like a nutrition table or garbled OCR — paste only the ingredient list', risk: 'c', pts: 0 }], unrecognized: true })
+      return
+    }
+    setGradeResult(quickScore(cleaned))
+    setSubIngs(cleaned)
     if (ingName) setSubName(ingName)
   }
 
   async function submitProduct() {
     if (!subName.trim()) { setSubError('Please enter the product name.'); return }
     if (!subIngs.trim()) { setSubError('Please paste the ingredient list.'); return }
+    // Clean the ingredient text first
+    const cleanedIngs = cleanIngredientText(subIngs)
+    // Check for garbage/nutrition table text
+    if (isGarbageText(cleanedIngs)) {
+      setSubError('The text looks like it contains nutritional information, manufacturing details, or unreadable characters instead of an ingredient list. Please paste ONLY the ingredients section (usually starts with "Ingredients:" on the label).')
+      return
+    }
     // Validate ingredients look real before submitting
-    const preview = quickScore(subIngs)
+    const preview = quickScore(cleanedIngs)
     if (preview.unrecognized) {
-      setSubError('The ingredient text does not contain any recognizable ingredients. Please paste the actual ingredient list from the product label.')
+      setSubError('No recognizable ingredients found. Please paste the actual ingredient list from the product label.')
       return
     }
     setSubError(''); setSubLoading(true)

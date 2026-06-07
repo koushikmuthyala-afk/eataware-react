@@ -139,7 +139,7 @@ export default function Home({ auth, onSignIn }) {
       <section className="py-8 px-6" style={{ background: 'var(--ink)' }}>
         <div className="max-w-3xl mx-auto flex flex-wrap justify-around gap-6 text-center">
           {[
-            { val: `${count || '500'}+`, lbl: 'Products rated A–F'       },
+            { val: `${count || '...'}+`, lbl: 'Products rated A–F'       },
             { val: '120+',               lbl: 'Ingredients decoded'       },
             { val: 'FSSAI',              lbl: 'FSSAI-referenced data'     },
             { val: 'Free',               lbl: 'Free to use during beta'   },

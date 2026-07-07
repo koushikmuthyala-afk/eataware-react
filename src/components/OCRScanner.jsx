@@ -86,6 +86,7 @@ export default function OCRScanner({ onGraded, onClose }) {
   const canvasRef  = useRef(null)
   const streamRef  = useRef(null)
   const fileInputRef = useRef(null)
+  const nativeCameraRef = useRef(null)   // opens the phone's native camera app (full-res photo)
 
   const [state, setState]       = useState(STATES.idle)
   const [progress, setProgress] = useState(0)
@@ -157,6 +158,38 @@ export default function OCRScanner({ onGraded, onClose }) {
     setState(STATES.capturing)
   }
 
+  // ── Preprocess image for better OCR: upscale + grayscale + contrast ──
+  function preprocessImage(dataUrl) {
+    return new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        // Upscale small images — Tesseract reads best at ~300 DPI equivalent
+        const targetWidth = Math.max(img.width, 1600)
+        const scale = targetWidth / img.width
+        const canvas = document.createElement('canvas')
+        canvas.width = targetWidth
+        canvas.height = Math.round(img.height * scale)
+        const ctx = canvas.getContext('2d')
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+        // Grayscale + contrast stretch
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const d = imgData.data
+        for (let i = 0; i < d.length; i += 4) {
+          let g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+          g = Math.min(255, Math.max(0, (g - 128) * 1.25 + 128))  // +25% contrast
+          d[i] = d[i + 1] = d[i + 2] = g
+        }
+        ctx.putImageData(imgData, 0, 0)
+        resolve(canvas.toDataURL('image/jpeg', 0.95))
+      }
+      img.onerror = () => resolve(dataUrl)  // fall back to original on error
+      img.src = dataUrl
+    })
+  }
+
   // ── OCR ─────────────────────────────────────────────────────────
   async function runOCR() {
     if (!capturedImage) return
@@ -166,8 +199,9 @@ export default function OCRScanner({ onGraded, onClose }) {
     try {
       const worker = await getTesseract()
 
-      // v7 API — same recognize interface
-      const { data } = await worker.recognize(capturedImage)
+      // Preprocess for sharper text, then recognize
+      const prepped = await preprocessImage(capturedImage)
+      const { data } = await worker.recognize(prepped)
       const text = data.text || ''
       setRawText(text)
 
@@ -266,16 +300,25 @@ export default function OCRScanner({ onGraded, onClose }) {
               ))}
             </div>
           </div>
-          <button onClick={startCamera}
+          <button onClick={() => nativeCameraRef.current?.click()}
             className="w-full py-3 rounded-2xl text-sm font-bold text-white"
             style={{ background: 'var(--green)' }}>
-            Start Camera →
+            📸 Take Photo →
           </button>
           <button onClick={() => fileInputRef.current?.click()}
             className="w-full py-2.5 rounded-2xl text-sm font-semibold border mt-2"
             style={{ borderColor: 'var(--green-mid)', color: 'var(--green)' }}>
             📁 Upload from Gallery
           </button>
+          <button onClick={startCamera}
+            className="w-full py-2 mt-2 text-xs font-medium"
+            style={{ color: 'var(--muted)' }}>
+            Use live scanner instead
+          </button>
+          {/* Native camera: capture="environment" opens the phone camera app and returns a
+              full-resolution, autofocused photo — far better OCR than a 1080p video frame */}
+          <input ref={nativeCameraRef} type="file" accept="image/*" capture="environment"
+            className="hidden" onChange={handleFileUpload} />
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
             onChange={handleFileUpload} />
         </div>
@@ -478,6 +521,11 @@ export default function OCRScanner({ onGraded, onClose }) {
 
           {/* Manual fallback */}
           <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+            <button onClick={() => nativeCameraRef.current?.click()}
+              className="w-full py-2.5 rounded-2xl text-sm font-bold text-white mb-2"
+              style={{ background: 'var(--green)' }}>
+              📸 Retake Photo
+            </button>
             <button onClick={() => fileInputRef.current?.click()}
               className="w-full py-2.5 rounded-2xl text-sm font-semibold border mb-3"
               style={{ borderColor: 'var(--green-mid)', color: 'var(--green)' }}>

@@ -20,23 +20,40 @@ async function getTesseract() {
 
 // Clean up raw OCR text to extract usable ingredient list
 function cleanOCRText(raw) {
-  return raw
+  const flat = (raw || '')
     .replace(/\n+/g, ', ')           // newlines → commas
-    .replace(/[|[\]{}\\]/g, '')      // remove OCR noise chars
-    // Strip nutritional table data
-    .replace(/nutri(?:tion(?:al)?|ents?)\s*(?:information|facts?|value|table)[^]*?(?=ingredients?|$)/gi, '')
-    .replace(/(?:energy|protein|carbohydrate|total fat|saturated fat|trans fat|cholesterol|sodium|dietary fibre)\s*[\(\-:]\s*[\d.]+\s*(?:g|mg|kcal|kj|%)[^,]*/gi, '')
+    .replace(/[|[\]{}\\_~`]/g, '')   // remove OCR noise chars
+
+  // Extract just the ingredients section: find the "INGREDIENTS" marker
+  // (OCR-tolerant) and cut at the next section header. Full-pack photos contain
+  // nutrition tables + MFG details — extracting beats trying to strip everything.
+  const startMatch = flat.match(/[i1l][nm]gred[i1l]ents?\s*[:\-.]?/i)
+  let section = flat
+  if (startMatch) section = flat.slice(startMatch.index + startMatch[0].length)
+
+  const terminators = [
+    /nutri(?:tion(?:al)?|ents?)\s*(?:information|facts?|value|table)/i,
+    /allergen\s*(?:information|warning|advice|declaration)/i,
+    /(?:^|\s)(?:mfg|mfd|pkd|pkg)\s*[:.]?/i,
+    /best\s*before/i, /use\s*by/i, /expiry/i,
+    /net\s*(?:weight|wt|qty|quantity)/i, /\bmrp\b/i,
+    /(?:manufactured|marketed|packed|distributed)\s*(?:by|at|for)/i,
+    /storage\s*(?:condition|instruction)/i, /store\s+in\s+a?\s*(?:cool|dry)/i,
+    /customer\s*care/i, /fssai/i, /batch\s*no/i,
+  ]
+  let cutAt = section.length
+  for (const re of terminators) {
+    const m = section.match(re)
+    if (m && m.index < cutAt && m.index > 15) cutAt = m.index
+  }
+  const extracted = section.slice(0, cutAt).trim()
+  const base = extracted.length >= 15 ? extracted : flat
+
+  return base
+    // Strip residual per-100g nutrition fragments
+    .replace(/(?:energy|carbohydrate|total fat|saturated fat|trans fat|cholesterol|dietary fibre)\s*[\(\-:]?\s*[\d.]+\s*(?:g|mg|kcal|kj|%)[^,]*/gi, '')
     .replace(/(?:per\s*(?:100\s*[gm]l?|serv(?:e|ing)))[^,]*/gi, '')
     .replace(/%\s*(?:rda|dv|daily value)[^,]*/gi, '')
-    // Strip manufacturing/label metadata
-    .replace(/(?:mfg|mfd|pkg|exp|best before|use by|batch|lot|mrp|net (?:weight|wt|qty))\s*[:.]?\s*[^,]*/gi, '')
-    .replace(/(?:fssai|lic|reg)\s*(?:no|number)?\s*[:.]?\s*[\d]+[^,]*/gi, '')
-    .replace(/(?:manufactured|marketed|packed|distributed)\s*(?:by|at|for)\s*[:.]?\s*[^,]*/gi, '')
-    .replace(/(?:customer care|toll free|helpline|write to|contact)\s*[:.]?\s*[^,]*/gi, '')
-    .replace(/(?:store|keep)\s*(?:in|at)\s*(?:cool|dry|room)[^,]*/gi, '')
-    // Strip allergen warnings (separate from ingredients)
-    .replace(/allergen\s*(?:information|warning|advice|declaration)\s*[:.]?\s*[^,]*/gi, '')
-    .replace(/(?:contains?|may contain)\s*[:.]?\s*(?:wheat|milk|soy|nut|egg|fish|gluten|sesame|mustard)[^,]*/gi, '')
     // Strip barcode-like patterns
     .replace(/\b\d{8,13}\b/g, '')
     // Strip very short fragments (OCR noise)
@@ -44,9 +61,9 @@ function cleanOCRText(raw) {
     // Final cleanup
     .replace(/\s{2,}/g, ' ')
     .replace(/,\s*,/g, ',')
-    .replace(/^\s*[Ii]ngredients?\s*[:.]?\s*/i, '')
-    .replace(/^\s*,+/, '')
+    .replace(/^\s*[,.:\-]+/, '')
     .trim()
+    .slice(0, 1200)                  // cap length instead of rejecting long scans
 }
 
 // Detect if text looks like an ingredient list
@@ -158,32 +175,44 @@ export default function OCRScanner({ onGraded, onClose }) {
     setState(STATES.capturing)
   }
 
-  // ── Preprocess image for better OCR: upscale + grayscale + contrast ──
+  // ── Preprocess image for better OCR: resize to optimal + grayscale + contrast ──
   function preprocessImage(dataUrl) {
     return new Promise((resolve) => {
       const img = new Image()
       img.onload = () => {
-        // Upscale small images — Tesseract reads best at ~300 DPI equivalent
-        const targetWidth = Math.max(img.width, 1600)
-        const scale = targetWidth / img.width
-        const canvas = document.createElement('canvas')
-        canvas.width = targetWidth
-        canvas.height = Math.round(img.height * scale)
-        const ctx = canvas.getContext('2d')
-        ctx.imageSmoothingEnabled = true
-        ctx.imageSmoothingQuality = 'high'
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        try {
+          // Tesseract sweet spot: ~1600-2000px on the longest side.
+          // Phone photos are 12MP+ (4032px) — MUST downscale or mobile WASM
+          // runs out of memory / takes minutes. Tiny images get upscaled.
+          const MAX_DIM = 2000
+          const MIN_DIM = 1400
+          const longest = Math.max(img.width, img.height)
+          let scale = 1
+          if (longest > MAX_DIM) scale = MAX_DIM / longest        // downscale big photos
+          else if (longest < MIN_DIM) scale = MIN_DIM / longest   // upscale small ones
 
-        // Grayscale + contrast stretch
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        const d = imgData.data
-        for (let i = 0; i < d.length; i += 4) {
-          let g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-          g = Math.min(255, Math.max(0, (g - 128) * 1.25 + 128))  // +25% contrast
-          d[i] = d[i + 1] = d[i + 2] = g
+          const canvas = document.createElement('canvas')
+          canvas.width  = Math.round(img.width * scale)
+          canvas.height = Math.round(img.height * scale)
+          const ctx = canvas.getContext('2d')
+          ctx.imageSmoothingEnabled = true
+          ctx.imageSmoothingQuality = 'high'
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+          // Grayscale + contrast stretch
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+          const d = imgData.data
+          for (let i = 0; i < d.length; i += 4) {
+            let g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+            g = Math.min(255, Math.max(0, (g - 128) * 1.25 + 128))  // +25% contrast
+            d[i] = d[i + 1] = d[i + 2] = g
+          }
+          ctx.putImageData(imgData, 0, 0)
+          resolve(canvas.toDataURL('image/jpeg', 0.92))
+        } catch (err) {
+          // Canvas/memory failure — fall back to the original image
+          resolve(dataUrl)
         }
-        ctx.putImageData(imgData, 0, 0)
-        resolve(canvas.toDataURL('image/jpeg', 0.95))
       }
       img.onerror = () => resolve(dataUrl)  // fall back to original on error
       img.src = dataUrl
@@ -270,8 +299,8 @@ export default function OCRScanner({ onGraded, onClose }) {
       setState(STATES.capturing)
     }
     reader.readAsDataURL(file)
-    // Reset file input so same file can be re-selected
-    if (fileInputRef.current) fileInputRef.current.value = ''
+    // Reset the input that fired (gallery OR native camera) so a repeat capture always triggers onChange
+    e.target.value = ''
   }
 
   // ── Render ──────────────────────────────────────────────────────

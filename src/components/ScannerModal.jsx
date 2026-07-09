@@ -5,37 +5,73 @@ import { supabase } from '../lib/supabase'
 import CameraScanner from './CameraScanner'
 import OCRScanner from './OCRScanner'
 
-// Clean ingredient text: strip nutrition tables, metadata, garbage
-function cleanIngredientText(text) {
-  return text
-    .replace(/nutri(?:tion(?:al)?|ents?)\s*(?:information|facts?|value|table)[^]*?(?=ingredients?|$)/gi, '')
-    .replace(/(?:energy|protein|carbohydrate|total fat|saturated fat|trans fat|cholesterol|sodium|dietary fibre)\s*[\(\-:]\s*[\d.]+\s*(?:g|mg|kcal|kj|%)[^,]*/gi, '')
-    .replace(/(?:per\s*(?:100\s*[gm]l?|serv(?:e|ing)))[^,]*/gi, '')
-    .replace(/%\s*(?:rda|dv|daily value)[^,]*/gi, '')
-    .replace(/(?:mfg|mfd|pkg|exp|best before|use by|batch|lot|mrp|net (?:weight|wt|qty))\s*[:.]?\s*[^,]*/gi, '')
-    .replace(/(?:fssai|lic|reg)\s*(?:no|number)?\s*[:.]?\s*[\d]+[^,]*/gi, '')
-    .replace(/(?:manufactured|marketed|packed|distributed)\s*(?:by|at|for)[^,]*/gi, '')
-    .replace(/allergen\s*(?:information|warning|advice|declaration)\s*[:.]?\s*[^,]*/gi, '')
-    .replace(/(?:contains?|may contain)\s*[:.]?\s*(?:wheat|milk|soy|nut|egg|fish|gluten)[^,]*/gi, '')
-    .replace(/\b\d{8,13}\b/g, '')
-    .replace(/\s{2,}/g, ' ')
-    .replace(/,\s*,/g, ',')
-    .replace(/^\s*,+/, '')
-    .trim()
+// Extract just the ingredients section from full back-of-pack OCR text.
+// Full-pack photos contain nutrition tables, MFG details, addresses — instead of
+// rejecting the whole text, find the "INGREDIENTS:" marker and cut at the next
+// section header (nutrition/allergen/storage/mfg...). Falls back to full text.
+function extractIngredientsSection(text) {
+  const t = text || ''
+  // Find the ingredients marker (OCR-tolerant: INGREDIENTS / NGREDENTS / 1NGRED1ENTS)
+  const startMatch = t.match(/[i1l!|]?[nm]gred[i1l!]*[ea]nts?\s*[:\-.]?/i)
+  let section = t
+  if (startMatch) {
+    section = t.slice(startMatch.index + startMatch[0].length)
+  } else {
+    // No marker — on Indian packs ingredients usually FOLLOW the nutrition table,
+    // so prefer text after the last nutrition row over marketing/manufacturer text.
+    const lastRow = [...t.matchAll(/(?:sodium|iron|cholesterol|trans\s*fat)\s*\(?m?g?\)?[^a-zA-Z]{0,20}[\d.]+/gi)].pop()
+    if (lastRow) {
+      const after = t.slice(lastRow.index + lastRow[0].length)
+      if (after.trim().length >= 30) section = after
+    }
+  }
+  // Cut at the first strong terminator that starts a new label section
+  const terminators = [
+    /nutri(?:tion(?:al)?|ents?)\s*(?:information|facts?|value|table)/i,
+    /allergen\s*(?:information|warning|advice|declaration)/i,
+    /(?:^|\s)(?:mfg|mfd|pkd|pkg)\s*[:.]?/i,
+    /best\s*before/i, /use\s*by/i, /expiry/i,
+    /net\s*(?:weight|wt|qty|quantity)/i, /\bmrp\b/i,
+    /(?:manufactured|marketed|packed|distributed)\s*(?:by|at|for)/i,
+    /storage\s*(?:condition|instruction)/i, /store\s+in\s+a?\s*(?:cool|dry)/i,
+    /customer\s*care/i, /fssai/i, /batch\s*no/i,
+  ]
+  let cutAt = section.length
+  for (const re of terminators) {
+    const m = section.match(re)
+    if (m && m.index < cutAt && m.index > 15) cutAt = m.index
+  }
+  const extracted = section.slice(0, cutAt).trim()
+  // Use extraction only if it looks substantive; otherwise keep original
+  return extracted.length >= 15 ? extracted : t
 }
 
-// Check if text is usable ingredient text (not garbage/nutrition table)
+// Clean ingredient text: extract ingredients section, then strip residual noise
+function cleanIngredientText(text) {
+  return extractIngredientsSection(text)
+    .replace(/(?:energy|carbohydrate|total fat|saturated fat|trans fat|cholesterol|dietary fibre)\s*[\(\-:]?\s*[\d.]+\s*(?:g|mg|kcal|kj|%)[^,]*/gi, '')
+    .replace(/(?:per\s*(?:100\s*[gm]l?|serv(?:e|ing)))[^,]*/gi, '')
+    .replace(/%\s*(?:rda|dv|daily value)[^,]*/gi, '')
+    .replace(/\b\d{8,13}\b/g, '')          // barcodes
+    .replace(/[|[\]{}\\_~`]/g, '')          // OCR noise chars
+    .replace(/\s{2,}/g, ' ')
+    .replace(/,\s*,/g, ',')
+    .replace(/^\s*[,.:\-]+/, '')
+    .trim()
+    .slice(0, 1200)                          // cap length instead of rejecting
+}
+
+// Check if text is unusable OCR garbage. Runs AFTER extraction, so thresholds
+// are lenient — we only block truly unreadable text, not long/full-pack scans.
 function isGarbageText(text) {
   if (!text || text.length < 10) return true
-  // High ratio of non-readable characters = OCR garbage
-  const nonReadable = text.replace(/[a-zA-Z0-9,.\-()%\s:;&/'"]/g, '').length
-  if (nonReadable / text.length > 0.25) return true
-  // If text is extremely long (>800 chars), likely scanned entire pack
-  if (text.length > 800) return true
-  // Nutrition table keywords dominate
-  const nutriWords = (text.match(/energy|protein|carbohydrate|fat|sodium|cholesterol|kcal|kj|serving|rda/gi) || []).length
+  // Very high ratio of non-readable characters = OCR garbage
+  const nonReadable = text.replace(/[a-zA-Z0-9,.\-()%\s:;&/'"+*]/g, '').length
+  if (nonReadable / text.length > 0.35) return true
+  // Nutrition table utterly dominates even after extraction (no real ingredients)
+  const nutriWords = (text.match(/energy|carbohydrate|cholesterol|kcal|kj|serving|rda/gi) || []).length
   const totalWords = text.split(/\s+/).length
-  if (nutriWords > 5 && nutriWords / totalWords > 0.15) return true
+  if (nutriWords > 8 && nutriWords / totalWords > 0.3) return true
   return false
 }
 

@@ -27,9 +27,21 @@ function cleanOCRText(raw) {
   // Extract just the ingredients section: find the "INGREDIENTS" marker
   // (OCR-tolerant) and cut at the next section header. Full-pack photos contain
   // nutrition tables + MFG details — extracting beats trying to strip everything.
-  const startMatch = flat.match(/[i1l][nm]gred[i1l]ents?\s*[:\-.]?/i)
+  // Tolerant of OCR mangling: INGREDIENTS / NGREDENTS / 1NGRED1ENTS / INGREDENTS
+  const startMatch = flat.match(/[i1l!|]?[nm]gred[i1l!]*[ea]nts?\s*[:\-.]?/i)
   let section = flat
-  if (startMatch) section = flat.slice(startMatch.index + startMatch[0].length)
+  if (startMatch) {
+    section = flat.slice(startMatch.index + startMatch[0].length)
+  } else {
+    // No marker found. On Indian packs the ingredient list usually sits BELOW
+    // the nutrition table — prefer the text AFTER the last nutrition row
+    // instead of the text before it (which is marketing/manufacturer info).
+    const lastRow = [...flat.matchAll(/(?:sodium|iron|cholesterol|trans\s*fat)\s*\(?m?g?\)?[^a-zA-Z]{0,20}[\d.]+/gi)].pop()
+    if (lastRow) {
+      const after = flat.slice(lastRow.index + lastRow[0].length)
+      if (after.trim().length >= 30) section = after
+    }
+  }
 
   const terminators = [
     /nutri(?:tion(?:al)?|ents?)\s*(?:information|facts?|value|table)/i,
@@ -509,7 +521,7 @@ export default function OCRScanner({ onGraded, onClose }) {
           </details>
 
           {/* Actions */}
-          <button onClick={() => onGraded({ cleanText, result })}
+          <button onClick={() => onGraded({ cleanText: (cleanText && cleanText.trim()) || rawText || '', result })}
             className="w-full py-3 rounded-2xl text-sm font-bold text-white mb-2"
             style={{ background: 'var(--green)' }}>
             ➕ Submit to EatAware Database

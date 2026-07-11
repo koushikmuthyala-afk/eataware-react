@@ -81,23 +81,28 @@ function cleanOCRText(raw) {
 // Detect if text looks like an ingredient list
 function looksLikeIngredients(text) {
   const lower = text.toLowerCase()
-  const score = [
+  const foodChecks = [
     /flour|maida|atta|besan/.test(lower),
-    /salt|sugar|sweetener|jaggery/.test(lower),
-    /oil|fat|butter|ghee|vanaspati/.test(lower),
-    /ins\s?\d{3}|e\d{3}/.test(lower),
+    /\bsalt\b|sugar|sweetener|jaggery/.test(lower),
+    /\boil\b|\bfats?\b|butter|ghee|vanaspati|palm|olein/.test(lower),
+    /ins\s?\d{3}|\be\d{3}\b/.test(lower),
     /preserv|colour|flavou|emulsif|stabiliz|antioxid/.test(lower),
-    /wheat|rice|corn|soy|milk|egg|water|starch/.test(lower),
-    /sodium|calcium|potassium|acid|phosph/.test(lower),
+    /wheat|rice|corn|soy|milk|\beggs?\b|water|starch|\boats?\b/.test(lower),
+    /sodium|calcium|potassium|\bacid\b|phosph/.test(lower),
     /spice|masala|turmeric|chilli|cumin|pepper/.test(lower),
     /protein|vitamin|mineral|fibre|fiber/.test(lower),
+    /\bnuts?\b|almond|cashew|raisin|\bseeds?\b|cocoa|extract/.test(lower),
     /contain|ingredient|allergen/.test(lower),
+  ]
+  const foodHits = foodChecks.filter(Boolean).length
+  const structural = [
     text.includes(','),
     text.split(',').length > 2,
-    // Check that text has mostly readable ASCII/English characters
-    (text.replace(/[a-zA-Z0-9,.\-()%\s:;]/g, '').length / text.length) < 0.3,
+    /\(\s*\d+(?:\.\d+)?\s*%?\s*\)/.test(text),   // "(40%)" style percentages
+    (text.replace(/[a-zA-Z0-9,.\-()%\s:;&/']/g, '').length / text.length) < 0.3,
   ].filter(Boolean).length
-  return score >= 3
+  // Must mention at least one real food/additive term — commas alone don't count
+  return foodHits >= 1 && (foodHits + structural) >= 3
 }
 
 const STATES = {
@@ -211,13 +216,30 @@ export default function OCRScanner({ onGraded, onClose }) {
           ctx.imageSmoothingQuality = 'high'
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
 
-          // Grayscale + contrast stretch
+          // Grayscale + measure average brightness
           const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
           const d = imgData.data
+          let sum = 0
           for (let i = 0; i < d.length; i += 4) {
-            let g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-            g = Math.min(255, Math.max(0, (g - 128) * 1.25 + 128))  // +25% contrast
+            const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
             d[i] = d[i + 1] = d[i + 2] = g
+            sum += g
+          }
+          const mean = sum / (d.length / 4)
+
+          // Dark packaging (white text on brown/black — very common on Indian
+          // packs): Tesseract needs dark-text-on-light, so INVERT the image.
+          if (mean < 115) {
+            for (let i = 0; i < d.length; i += 4) {
+              const v = 255 - d[i]
+              d[i] = d[i + 1] = d[i + 2] = v
+            }
+          }
+
+          // Contrast stretch
+          for (let i = 0; i < d.length; i += 4) {
+            const v = Math.min(255, Math.max(0, (d[i] - 128) * 1.25 + 128))
+            d[i] = d[i + 1] = d[i + 2] = v
           }
           ctx.putImageData(imgData, 0, 0)
           resolve(canvas.toDataURL('image/jpeg', 0.92))
@@ -512,7 +534,12 @@ export default function OCRScanner({ onGraded, onClose }) {
               <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
                 You can edit the text above to fix any OCR errors, then tap Re-grade.
               </p>
-              <button onClick={() => { const s = quickScore(cleanText); setResult(s) }}
+              <button onClick={() => {
+                const t = cleanText.trim()
+                if (!looksLikeIngredients(t)) {
+                  setResult({ grade: '?', score: 0, unrecognized: true, flags: [{ name: 'This text does not look like an ingredient list — edit it or retake the photo closer to the ingredients section', risk: 'c', pts: 0 }] })
+                } else setResult(quickScore(t))
+              }}
                 className="mt-2 px-4 py-2 rounded-xl text-xs font-bold text-white"
                 style={{ background: 'var(--green)' }}>
                 Re-grade →
@@ -584,7 +611,14 @@ export default function OCRScanner({ onGraded, onClose }) {
               style={{ borderColor: 'var(--border)' }}
             />
             <button
-              onClick={() => { if (cleanText.trim().length > 10) { setResult(quickScore(cleanText)); setState(STATES.result) } }}
+              onClick={() => {
+                const t = cleanText.trim()
+                if (t.length <= 10) return
+                if (!looksLikeIngredients(t)) {
+                  setResult({ grade: '?', score: 0, unrecognized: true, flags: [{ name: 'This text does not look like an ingredient list — please paste the actual ingredients from the label', risk: 'c', pts: 0 }] })
+                } else setResult(quickScore(t))
+                setState(STATES.result)
+              }}
               disabled={cleanText.trim().length < 10}
               className="w-full mt-2 py-2.5 rounded-2xl text-sm font-bold text-white disabled:opacity-40"
               style={{ background: 'var(--green)' }}>

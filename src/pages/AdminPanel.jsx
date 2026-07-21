@@ -116,7 +116,7 @@ export default function AdminPanel({ user, authLoading }) {
       name: f.name, desc: '', safe: f.risk==='s'
     }))
     const { error } = await supabase.from('products').insert([{
-      slug, name: sub.product_name, brand: sub.brand||'', grade: sub.predicted_grade||'C',
+      slug, name: sub.product_name, brand: sub.brand||'', grade: scored.grade || sub.predicted_grade || 'C',
       category:'General', impact:'', ings, status:'published',
     }])
     if (error) { setMsg({ text: error.message, type:'error' }); return }

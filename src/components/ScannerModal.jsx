@@ -47,8 +47,35 @@ function extractIngredientsSection(text) {
 }
 
 // Clean ingredient text: extract ingredients section, then strip residual noise
+
+// Drop OCR junk fragments that would inflate the ingredient count:
+// "ESSERE eee RT", "=", "TT", stray single letters, symbol-heavy noise.
+function dropJunkFragments(text) {
+  return text
+    // Bilingual labels: strip Devanagari/Tamil/Telugu/Bengali/Kannada/Gujarati etc.
+    // (the grading rules are English — regional script text only adds noise)
+    .replace(/[\u0900-\u0DFF]+/g, ' ')
+    // Fix words glued together by OCR: "ChiaSeeds" -> "Chia Seeds"
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .split(',')
+    .map(f => f.trim())
+    .filter(f => {
+      if (!f) return false
+      // Keep additive codes and percentages even without vowels: "INS 320", "E102", "(40%)"
+      if (/ins\s*\d+|^e\s*\d{3}\b|\d+(\.\d+)?\s*%/i.test(f)) return true
+      if (f.length < 3) return false
+      if (!/[aeiou]/i.test(f)) return false
+      const letters = (f.match(/[a-zA-Z]/g) || []).length
+      if (letters / f.length < 0.5) return false
+      // All-caps gibberish with char runs: "ESSERE eee"
+      if (/\b(\w)\1{2,}\b/.test(f) && !/[a-z]{4,}/.test(f.replace(/\b(\w)\1{2,}\b/g, ''))) return false
+      return true
+    })
+    .join(', ')
+}
+
 function cleanIngredientText(text) {
-  return extractIngredientsSection(text)
+  return dropJunkFragments(extractIngredientsSection(text))
     .replace(/(?:energy|carbohydrate|total fat|saturated fat|trans fat|cholesterol|dietary fibre)\s*[\(\-:]?\s*[\d.]+\s*(?:g|mg|kcal|kj|%)[^,]*/gi, '')
     .replace(/(?:per\s*(?:100\s*[gm]l?|serv(?:e|ing)))[^,]*/gi, '')
     .replace(/%\s*(?:rda|dv|daily value)[^,]*/gi, '')

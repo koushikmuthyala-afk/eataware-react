@@ -79,6 +79,33 @@ function cleanOCRText(raw) {
 }
 
 // Detect if text looks like an ingredient list
+
+// Drop OCR junk fragments that would inflate the ingredient count:
+// "ESSERE eee RT", "=", "TT", stray single letters, symbol-heavy noise.
+function dropJunkFragments(text) {
+  return text
+    // Bilingual labels: strip Devanagari/Tamil/Telugu/Bengali/Kannada/Gujarati etc.
+    // (the grading rules are English — regional script text only adds noise)
+    .replace(/[\u0900-\u0DFF]+/g, ' ')
+    // Fix words glued together by OCR: "ChiaSeeds" -> "Chia Seeds"
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .split(',')
+    .map(f => f.trim())
+    .filter(f => {
+      if (!f) return false
+      // Keep additive codes and percentages even without vowels: "INS 320", "E102", "(40%)"
+      if (/ins\s*\d+|^e\s*\d{3}\b|\d+(\.\d+)?\s*%/i.test(f)) return true
+      if (f.length < 3) return false
+      if (!/[aeiou]/i.test(f)) return false
+      const letters = (f.match(/[a-zA-Z]/g) || []).length
+      if (letters / f.length < 0.5) return false
+      // All-caps gibberish with char runs: "ESSERE eee"
+      if (/\b(\w)\1{2,}\b/.test(f) && !/[a-z]{4,}/.test(f.replace(/\b(\w)\1{2,}\b/g, ''))) return false
+      return true
+    })
+    .join(', ')
+}
+
 function looksLikeIngredients(text) {
   const lower = text.toLowerCase()
   const foodChecks = [
@@ -265,10 +292,15 @@ export default function OCRScanner({ onGraded, onClose }) {
       // Preprocess for sharper text, then recognize
       const prepped = await preprocessImage(capturedImage)
       const { data } = await worker.recognize(prepped)
-      const text = data.text || ''
+      // Drop low-confidence words (OCR junk like "ESSERE" scores <55)
+      let text = data.text || ''
+      if (Array.isArray(data.words) && data.words.length >= 8) {
+        const good = data.words.filter(w => (w.confidence ?? 100) >= 55 && w.text && w.text.trim())
+        if (good.length >= 5) text = good.map(w => w.text).join(' ')
+      }
       setRawText(text)
 
-      const cleaned = cleanOCRText(text)
+      const cleaned = dropJunkFragments(cleanOCRText(text))
       setCleanText(cleaned)
 
       if (!cleaned || cleaned.length < 15) {

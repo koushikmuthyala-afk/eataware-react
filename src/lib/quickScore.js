@@ -81,6 +81,15 @@ const CAUTION = [
 
 // ── BENEFICIAL (green) ──────────────────────────────────────────
 const GOOD = [
+  // Dried fruits & nuts (natural sugars — v4: positive, not penalized)
+  { re: /\bdates?\b|khajur/i,                     name: 'Dates (natural sugar + fibre)',  pts: +4  },
+  { re: /\braisins?\b|kishmish/i,                 name: 'Raisins (natural sugar + iron)', pts: +3  },
+  { re: /\bfigs?\b|anjeer/i,                      name: 'Figs (natural sugar + fibre)',   pts: +3  },
+  { re: /\balmonds?\b|badam/i,                    name: 'Almonds',                        pts: +4  },
+  { re: /\bcashews?\b|kaju/i,                     name: 'Cashews',                        pts: +3  },
+  { re: /\bwalnuts?\b|akhrot/i,                   name: 'Walnuts (omega-3)',              pts: +4  },
+  { re: /\bpistachios?\b|pista/i,                 name: 'Pistachios',                     pts: +3  },
+  { re: /\bmakhana\b|fox ?nuts?/i,                name: 'Makhana (fox nuts)',             pts: +5  },
   // Whole grains & millets
   { re: /whole grain|whole wheat/i,               name: 'Whole grain',                   pts: +8  },
   { re: /\bragi\b|finger millet/i,                name: 'Ragi (finger millet)',           pts: +8  },
@@ -141,11 +150,24 @@ const GRADE_BANDS = [
 export function quickScore(text) {
   const lower = text.toLowerCase()
 
-  // Split into individual ingredients for position analysis
-  const ingredients = lower
+  // Split into individual ingredients for position analysis.
+  // Only keep PLAUSIBLE fragments — OCR junk ("=", "TT", "eee", symbol noise)
+  // must never inflate the ingredient count or trigger processing penalties.
+  const allFragments = lower
     .split(/,|;|\|/)
     .map(s => s.trim())
     .filter(s => s.length > 1)
+
+  const isPlausible = (f) =>
+    /ins\s*\d+|^e\s*\d{3}\b|\d+(\.\d+)?\s*%/.test(f) ||
+    (f.length >= 3 &&
+     /[aeiou]/.test(f) &&
+     !/\b(\w)\1{2,}\b/.test(f) &&
+     ((f.match(/[a-z]/g) || []).length / f.length) >= 0.5)
+
+  const ingredients = allFragments.filter(isPlausible)
+  const junkRatio = allFragments.length > 0
+    ? 1 - (ingredients.length / allFragments.length) : 0
 
   let score = 50  // Neutral baseline
   const flags = []
@@ -179,13 +201,15 @@ export function quickScore(text) {
   }
 
   // ── Simplicity bonus (fewer ingredients = less processed) ──
-  if (ingredients.length <= 1 && ingredients.length > 0) {
+  // Requires a readable scan AND at least one recognized food term.
+  const hasRecognizedTerm = used.size > 0
+  if (junkRatio <= 0.4 && hasRecognizedTerm && ingredients.length <= 1 && ingredients.length > 0) {
     score += 15
     flags.push({ name: 'Single ingredient — unprocessed', risk: 's', pts: +15 })
-  } else if (ingredients.length <= 3) {
+  } else if (junkRatio <= 0.4 && hasRecognizedTerm && ingredients.length <= 3) {
     score += 10
     flags.push({ name: 'Only ' + ingredients.length + ' ingredients — minimal processing', risk: 's', pts: +10 })
-  } else if (ingredients.length <= 5) {
+  } else if (junkRatio <= 0.4 && hasRecognizedTerm && ingredients.length <= 5) {
     score += 5
     flags.push({ name: ingredients.length + ' ingredients — simple formulation', risk: 's', pts: +5 })
   }
@@ -202,14 +226,18 @@ export function quickScore(text) {
     } else if (/^(?:tomato|onion|garlic|spinach|vegetable|carrot|potato|fruit|mango|apple|orange|banana)/.test(first)) {
       score += 6
       flags.push({ name: 'Fruit/vegetable base', risk: 's', pts: +6 })
-    } else if (/^(?:peanut|almond|cashew|walnut|pistachio|hazelnut|cocoa|coconut)/.test(first)) {
+    } else if (/^(?:dates?|raisin|peanut|almond|cashew|walnut|pistachio|hazelnut|cocoa|coconut)/.test(first)) {
       score += 6
       flags.push({ name: 'Nut/seed base', risk: 's', pts: +6 })
     }
   }
 
   // ── Ingredient count penalty (ultra-processing signal) ──
-  if (ingredients.length > 20) {
+  // Skipped when >40% of fragments are unreadable — low-quality scans must
+  // not be punished for junk the OCR invented.
+  if (junkRatio > 0.4) {
+    flags.push({ name: 'Some label text could not be read — grade is an estimate, verify with the label', risk: 'c', pts: 0 })
+  } else if (ingredients.length > 20) {
     score -= 8
     flags.push({ name: `${ingredients.length} ingredients (ultra-processed)`, risk: 'c', pts: -8 })
   } else if (ingredients.length > 15) {
